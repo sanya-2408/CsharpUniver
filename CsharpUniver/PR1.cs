@@ -13,6 +13,35 @@ class Entity
     }
 }
 
+class InvalidVehicleDataException : Exception
+{
+    public InvalidVehicleDataException(string msg) : base(msg) { }
+}
+
+class VehicleNotFoundException : Exception
+{
+    public VehicleNotFoundException(string msg) : base(msg) { }
+}
+
+class OwnerNotFoundException : Exception
+{
+    public OwnerNotFoundException(string msg) : base(msg) { }
+}
+
+class Result<T>
+{
+    public bool IsSuccess { get; set; }
+    public string Message { get; set; }
+    public T Value { get; set; }
+
+    public Result(bool isSuccess, string message, T value)
+    {
+        IsSuccess = isSuccess;
+        Message = message;
+        Value = value;
+    }
+}
+
 class ReportService
 {
     public void ExportToCsv(List<Vehicle> vehicles)
@@ -43,10 +72,16 @@ class ReportService
             File.AppendAllText(path, $"Всього транспорту,{vehicles.Count}\n");
             File.AppendAllText(path, $"З власником,{withOwner}\n");
             File.AppendAllText(path, $"Без власника,{withoutOwner}\n");
+
+            Console.WriteLine("Звіт створено.");
         }
         catch (IOException)
         {
             Console.WriteLine("Помилка роботи з файлом.");
+        }
+        finally
+        {
+            Console.WriteLine("Спробу експорту завершено.");
         }
     }
 
@@ -61,7 +96,11 @@ class ReportService
         }
         catch (IOException)
         {
-            Console.WriteLine("Помилка читання файлу. ");
+            Console.WriteLine("Помилка читання файлу.");
+        }
+        finally
+        {
+            Console.WriteLine("Спробу читання завершено.");
         }
     }
 }
@@ -70,57 +109,37 @@ static class Validator
 {
     public static bool IsValidString(string value)
     {
-        if (value ==  null)
-        {
-            return false;
-        }
-
-        if (value == "")
-        {
-            return false;
-        }
-        return true;
+        return !string.IsNullOrWhiteSpace(value);
     }
 
     public static bool IsValidYear(int year)
     {
-        if (1990 <= year && year <= 2026)
-        {
-            return true;
-        }
-        return false;
+        return year >= 1886 && year <= DateTime.Now.Year;
     }
 
     public static bool IsValidDoors(int doors)
     {
-        if (2 <= doors && doors <= 5)
-        {
-            return true;
-        }
-        return false;
+        return doors >= 2 && doors <= 5;
     }
 
     public static bool IsValidEngineVolume(int volume)
     {
-        if (volume > 0)
-        {
-            return true;
-        }
-        return  false;
+        return volume > 0;
     }
 }
+
 static class IdGenerator
 {
     private static int nextId = 1;
+
     public static int NextId()
     {
         return nextId++;
     }
 }
 
-class Vehicle : Entity 
+class Vehicle : Entity
 {
-    
     private string brand;
     private string model;
     private int year;
@@ -129,19 +148,37 @@ class Vehicle : Entity
     public string Brand
     {
         get { return brand; }
-        set { brand = value; }
+        set
+        {
+            if (!Validator.IsValidString(value))
+                throw new InvalidVehicleDataException("Марка не може бути порожньою.");
+
+            brand = value;
+        }
     }
 
     public string Model
     {
         get { return model; }
-        set { model = value; }
+        set
+        {
+            if (!Validator.IsValidString(value))
+                throw new InvalidVehicleDataException("Модель не може бути порожньою.");
+
+            model = value;
+        }
     }
 
     public int Year
     {
         get { return year; }
-        set { year = value; }
+        set
+        {
+            if (!Validator.IsValidYear(value))
+                throw new InvalidVehicleDataException("Некоректний рік випуску!");
+
+            year = value;
+        }
     }
 
     public Owner Owner
@@ -152,6 +189,15 @@ class Vehicle : Entity
 
     public Vehicle(string brand, string model, int year)
     {
+        if (!Validator.IsValidString(brand))
+            throw new InvalidVehicleDataException("Марка не може бути порожньою.");
+
+        if (!Validator.IsValidString(model))
+            throw new InvalidVehicleDataException("Модель не може бути порожньою.");
+
+        if (!Validator.IsValidYear(year))
+            throw new InvalidVehicleDataException("Некоректний рік випуску!");
+
         Id = IdGenerator.NextId();
         this.brand = brand;
         this.model = model;
@@ -161,12 +207,8 @@ class Vehicle : Entity
 
     public virtual string GetInfo()
     {
-        if (owner == null)
-        {
-            return $"Id: {Id}, Vehicle: {Brand} {Model}, Year: {Year}, Owner: none";
-        }
-
-        return $"Id: {Id}, Vehicle: {Brand} {Model}, Year: {Year}, Owner: {Owner.Fullname}";
+        string ownerInfo = owner == null ? "none" : owner.Fullname;
+        return $"Id: {Id}, Vehicle: {Brand} {Model}, Year: {Year}, Owner: {ownerInfo}";
     }
 }
 
@@ -178,30 +220,38 @@ class Car : Vehicle
     public int Doorscount
     {
         get { return doorscount; }
-        set { doorscount = value; }
+        set
+        {
+            if (!Validator.IsValidDoors(value))
+                throw new InvalidVehicleDataException("Кількість дверей повинна бути від 2 до 5.");
+
+            doorscount = value;
+        }
     }
 
     public string Fueltype
     {
         get { return fueltype; }
-        set { fueltype = value; }
+        set
+        {
+            if (!Validator.IsValidString(value))
+                throw new InvalidVehicleDataException("Тип палива не може бути порожнім.");
+
+            fueltype = value;
+        }
     }
 
     public Car(string brand, string model, int year, int doorscount, string fueltype)
         : base(brand, model, year)
     {
-        this.doorscount = doorscount;
-        this.fueltype = fueltype;
+        Doorscount = doorscount;
+        Fueltype = fueltype;
     }
 
     public override string GetInfo()
     {
-        if (Owner == null)
-        {
-            return $"Id: {Id}, Car: {Brand} {Model}, Year: {Year}, Doors: {Doorscount}, Fueltype: {Fueltype}, Owner: none";
-        }
-
-        return $"Id: {Id}, Car: {Brand} {Model}, Year: {Year}, Doors: {Doorscount}, Fueltype: {Fueltype}, Owner: {Owner.Fullname}";
+        string ownerInfo = Owner == null ? "none" : Owner.Fullname;
+        return $"Id: {Id}, Car: {Brand} {Model}, Year: {Year}, Doors: {Doorscount}, Fueltype: {Fueltype}, Owner: {ownerInfo}";
     }
 }
 
@@ -213,30 +263,38 @@ class Motorcycle : Vehicle
     public int Enginevolume
     {
         get { return enginevolume; }
-        set { enginevolume = value; }
+        set
+        {
+            if (!Validator.IsValidEngineVolume(value))
+                throw new InvalidVehicleDataException("Об'єм двигуна повинен бути більше 0.");
+
+            enginevolume = value;
+        }
     }
 
     public string Motorcycletype
     {
         get { return motorcycletype; }
-        set { motorcycletype = value; }
+        set
+        {
+            if (!Validator.IsValidString(value))
+                throw new InvalidVehicleDataException("Тип мотоцикла не може бути порожнім.");
+
+            motorcycletype = value;
+        }
     }
 
     public Motorcycle(string brand, string model, int year, int enginevolume, string motorcycletype)
         : base(brand, model, year)
     {
-        this.enginevolume = enginevolume;
-        this.motorcycletype = motorcycletype;
+        Enginevolume = enginevolume;
+        Motorcycletype = motorcycletype;
     }
 
     public override string GetInfo()
     {
-        if (Owner == null)
-        {
-            return $"Id: {Id}, Motorcycle: {Brand} {Model}, Year: {Year}, Enginevolume: {Enginevolume}, Motorcycletype: {Motorcycletype}, Owner: none";
-        }
-
-        return $"Id: {Id}, Motorcycle: {Brand} {Model}, Year: {Year}, Enginevolume: {Enginevolume}, Motorcycletype: {Motorcycletype}, Owner: {Owner.Fullname}";
+        string ownerInfo = Owner == null ? "none" : Owner.Fullname;
+        return $"Id: {Id}, Motorcycle: {Brand} {Model}, Year: {Year}, Enginevolume: {Enginevolume}, Motorcycletype: {Motorcycletype}, Owner: {ownerInfo}";
     }
 }
 
@@ -244,6 +302,7 @@ class Owner : Entity
 {
     private string fullname;
     private string phone;
+
     public string Fullname
     {
         get { return fullname; }
@@ -258,6 +317,12 @@ class Owner : Entity
 
     public Owner(string fullname, string phone)
     {
+        if (!Validator.IsValidString(fullname))
+            throw new ArgumentException("ПІБ не може бути порожнім.");
+
+        if (!Validator.IsValidString(phone))
+            throw new ArgumentException("Телефон не може бути порожнім.");
+
         Id = IdGenerator.NextId();
         this.fullname = fullname;
         this.phone = phone;
@@ -275,13 +340,15 @@ class Repository<T> where T : Entity
 
     public bool Add(T entity)
     {
+        if (entity == null)
+            return false;
+
         foreach (T item in entities)
         {
             if (item.Id == entity.Id)
-            {
                 return false;
-            }
         }
+
         entities.Add(entity);
         return true;
     }
@@ -291,28 +358,27 @@ class Repository<T> where T : Entity
         foreach (T item in entities)
         {
             if (item.Id == id)
-            {
                 return item;
-            }
         }
+
         return null;
     }
 
     public bool Remove(int id)
     {
         T item = Find(id);
-            if (item != null)
-            {
-                entities.Remove(item);
-                return true;
-            }
-        return false;
-    }
-    public List<T> GetAll()
-    { 
-        return entities;
+
+        if (item == null)
+            return false;
+
+        entities.Remove(item);
+        return true;
     }
 
+    public List<T> GetAll()
+    {
+        return entities;
+    }
 }
 
 class VehicleService
@@ -322,28 +388,50 @@ class VehicleService
 
     public bool AddVehicle(Vehicle vehicle)
     {
-        if (vehicle == null)
-        {
-            return false;
-        }
         return vehicles.Add(vehicle);
+    }
+
+    public Result<Owner> TryFindOwner(int id)
+    {
+        Owner owner = owners.Find(id);
+
+        if (owner == null)
+            return new Result<Owner>(false, "Owner not found", null);
+
+        return new Result<Owner>(true, "Owner found", owner);
+    }
+
+    public Result<Vehicle> TryFindVehicle(int id)
+    {
+        Vehicle vehicle = vehicles.Find(id);
+
+        if (vehicle == null)
+            return new Result<Vehicle>(false, "Vehicle not found", null);
+
+        return new Result<Vehicle>(true, "Vehicle found", vehicle);
     }
 
     public Vehicle FindVehicle(int id)
     {
-        return vehicles.Find(id);
+        Vehicle vehicle = vehicles.Find(id);
+
+        if (vehicle == null)
+            throw new VehicleNotFoundException("Vehicle not found");
+
+        return vehicle;
     }
 
     public List<Vehicle> FindVehicleByBrand(string brand)
     {
         List<Vehicle> result = new List<Vehicle>();
 
+        if (!Validator.IsValidString(brand))
+            return result;
+
         foreach (Vehicle vehicle in vehicles.GetAll())
         {
-            if (vehicle.Brand == brand)
-            {
+            if (vehicle.Brand.Equals(brand.Trim(), StringComparison.OrdinalIgnoreCase))
                 result.Add(vehicle);
-            }
         }
 
         return result;
@@ -354,9 +442,16 @@ class VehicleService
         Vehicle vehicle = vehicles.Find(id);
 
         if (vehicle == null)
-        {
             return false;
-        }
+
+        if (!Validator.IsValidYear(year))
+            throw new InvalidVehicleDataException("Некоректний рік випуску!");
+
+        if (!Validator.IsValidString(brand))
+            throw new InvalidVehicleDataException("Марка не може бути порожньою.");
+
+        if (!Validator.IsValidString(model))
+            throw new InvalidVehicleDataException("Модель не може бути порожньою.");
 
         vehicle.Brand = brand;
         vehicle.Model = model;
@@ -369,32 +464,25 @@ class VehicleService
     {
         Vehicle vehicle = vehicles.Find(id);
 
-        if (vehicle == null)
-        {
+        if (vehicle == null || vehicle.Owner != null)
             return false;
-        }
 
-        if (vehicle.Owner != null)
-        {
-            return false;
-        }
-
-        vehicles.Remove(id);
-        return  true;
+        return vehicles.Remove(id);
     }
 
     public bool AddOwner(Owner owner)
     {
-            if (owner == null)
-            {
-                return false;
-            }
-            return owners.Add(owner);
+        return owners.Add(owner);
     }
 
     public Owner FindOwner(int id)
     {
-        return owners.Find(id);
+        Owner owner = owners.Find(id);
+
+        if (owner == null)
+            throw new OwnerNotFoundException("Owner not found");
+
+        return owner;
     }
 
     public bool UpdateOwner(int id, string fullname, string phone)
@@ -402,9 +490,10 @@ class VehicleService
         Owner owner = owners.Find(id);
 
         if (owner == null)
-        {
             return false;
-        }
+
+        if (!Validator.IsValidString(fullname) || !Validator.IsValidString(phone))
+            return false;
 
         owner.Fullname = fullname;
         owner.Phone = phone;
@@ -417,19 +506,15 @@ class VehicleService
         Owner owner = owners.Find(id);
 
         if (owner == null)
-        {
             return false;
-        }
 
         foreach (Vehicle vehicle in vehicles.GetAll())
         {
             if (vehicle.Owner == owner)
-            {
                 return false;
-            }
         }
-        owners.Remove(id);
-        return true;
+
+        return owners.Remove(id);
     }
 
     public bool AssignOwner(int vehicleId, int ownerId)
@@ -437,23 +522,10 @@ class VehicleService
         Vehicle vehicle = vehicles.Find(vehicleId);
         Owner owner = owners.Find(ownerId);
 
-        if (vehicle == null)
-        {
+        if (vehicle == null || owner == null || vehicle.Owner != null)
             return false;
-        }
-
-        if (owner == null)
-        {
-            return false;
-        }
-
-        if (vehicle.Owner != null)
-        {
-            return false;
-        }
 
         vehicle.Owner = owner;
-
         return true;
     }
 
@@ -461,18 +533,10 @@ class VehicleService
     {
         Vehicle vehicle = vehicles.Find(vehicleId);
 
-        if (vehicle == null)
-        {
+        if (vehicle == null || vehicle.Owner == null)
             return false;
-        }
-
-        if (vehicle.Owner == null)
-        {
-            return false;
-        }
 
         vehicle.Owner = null;
-
         return true;
     }
 
@@ -493,7 +557,6 @@ class PR1
     {
         VehicleService service = new VehicleService();
         ReportService report = new ReportService();
-
         bool work = true;
 
         while (work)
@@ -515,370 +578,504 @@ class PR1
             Console.WriteLine("13. Відкріпити власника");
             Console.WriteLine("14. Створити звіт");
             Console.WriteLine("15. Прочитати звіт");
+            Console.WriteLine("16. Демонстрація винятку");
             Console.WriteLine("0. Вихід");
             Console.Write("Виберіть дію: ");
 
-            int choice = int.Parse(Console.ReadLine());
-
-            switch (choice)
+            if (!int.TryParse(Console.ReadLine(), out int choice))
             {
-                case 1:
-                    Console.WriteLine();
-                    Console.WriteLine("1. Автомобіль");
-                    Console.WriteLine("2. Мотоцикл");
-                    Console.Write("Виберіть тип: ");
+                Console.WriteLine("Введіть число!");
+                continue;
+            }
 
-                    int type = int.Parse(Console.ReadLine());
-
-                    Console.Write("Введіть марку: ");
-                    string brand = Console.ReadLine();
-                    
-                    if (!Validator.IsValidString(brand))
+            try
+            {
+                switch (choice)
+                {
+                    case 1:
                     {
-                        Console.WriteLine("Марка не може бути порожньою.");
-                        break;
-                    }
+                        Console.WriteLine("1. Автомобіль");
+                        Console.WriteLine("2. Мотоцикл");
+                        Console.Write("Виберіть тип: ");
 
-                    Console.Write("Введіть модель: ");
-                    string model = Console.ReadLine();
-                    if (!Validator.IsValidString(model))
-                    {
-                        Console.WriteLine("Модель не може бути порожньою.");
-                        break;
-                    }
-
-                    Console.Write("Введіть рік: ");
-                    int year = int.Parse(Console.ReadLine());
-                    if (!Validator.IsValidYear(year))
-                    {
-                        Console.WriteLine("Рік повинен бути від 1990 до 2026.");
-                        break;
-                    }
-
-                    if (type == 1)
-                    {
-                        Console.Write("Введіть кількість дверей: ");
-                        int doorscount = int.Parse(Console.ReadLine());
-                        if (!Validator.IsValidDoors(doorscount))
+                        if (!int.TryParse(Console.ReadLine(), out int type))
                         {
-                            Console.WriteLine("Кількість дверей повинна бути від 2 до 5.");
+                            Console.WriteLine("Введіть коректний тип.");
                             break;
                         }
 
-                        Console.Write("Введіть тип палива: ");
-                        string fueltype = Console.ReadLine();
-                        if (!Validator.IsValidString(fueltype))
+                        Console.Write("Введіть марку: ");
+                        string brand = Console.ReadLine();
+
+                        if (!Validator.IsValidString(brand))
                         {
-                            Console.WriteLine("Тип палива не може бути порожнім.");
+                            Console.WriteLine("Марка не може бути порожньою.");
                             break;
                         }
 
-                        Car car = new Car(brand, model, year, doorscount, fueltype);
-                        if (service.AddVehicle(car))
+                        Console.Write("Введіть модель: ");
+                        string model = Console.ReadLine();
+
+                        if (!Validator.IsValidString(model))
                         {
-                            Console.WriteLine("Автомобіль додано.");
-                        }
-                    }
-                    else if (type == 2)
-                    {
-                        Console.Write("Введіть об'єм двигуна: ");
-                        int enginevolume = int.Parse(Console.ReadLine());
-                        if (!Validator.IsValidEngineVolume(enginevolume))
-                        {
-                            Console.WriteLine("Об'єм двигуна повинен бути більше 0.");
+                            Console.WriteLine("Модель не може бути порожньою.");
                             break;
                         }
 
-                        Console.Write("Введіть тип мотоцикла: ");
-                        string motorcycletype = Console.ReadLine();
-                        if (!Validator.IsValidString(motorcycletype))
+                        Console.Write("Введіть рік: ");
+
+                        if (!int.TryParse(Console.ReadLine(), out int year))
                         {
-                            Console.WriteLine("Тип мотоцикла не може бути порожнім.");
+                            Console.WriteLine("Введіть коректний рік.");
                             break;
                         }
 
-                        Motorcycle motorcycle = new Motorcycle(brand, model, year, enginevolume, motorcycletype);
-
-                        if (service.AddVehicle(motorcycle))
+                        if (!Validator.IsValidYear(year))
                         {
-                            Console.WriteLine("Мотоцикл додано.");
+                            Console.WriteLine("Рік повинен бути від 1886 до поточного року.");
+                            break;
+                        }
+
+                        if (type == 1)
+                        {
+                            Console.Write("Введіть кількість дверей: ");
+
+                            if (!int.TryParse(Console.ReadLine(), out int doorscount))
+                            {
+                                Console.WriteLine("Введіть коректну кількість дверей.");
+                                break;
+                            }
+
+                            if (!Validator.IsValidDoors(doorscount))
+                            {
+                                Console.WriteLine("Кількість дверей повинна бути від 2 до 5.");
+                                break;
+                            }
+
+                            Console.Write("Введіть тип палива: ");
+                            string fueltype = Console.ReadLine();
+
+                            if (!Validator.IsValidString(fueltype))
+                            {
+                                Console.WriteLine("Тип палива не може бути порожнім.");
+                                break;
+                            }
+
+                            Car car = new Car(brand, model, year, doorscount, fueltype);
+
+                            if (service.AddVehicle(car))
+                                Console.WriteLine("Автомобіль додано.");
+                            else
+                                Console.WriteLine("Не вдалося додати автомобіль.");
+                        }
+                        else if (type == 2)
+                        {
+                            Console.Write("Введіть об'єм двигуна: ");
+
+                            if (!int.TryParse(Console.ReadLine(), out int enginevolume))
+                            {
+                                Console.WriteLine("Введіть коректний об'єм двигуна.");
+                                break;
+                            }
+
+                            if (!Validator.IsValidEngineVolume(enginevolume))
+                            {
+                                Console.WriteLine("Об'єм двигуна повинен бути більше 0.");
+                                break;
+                            }
+
+                            Console.Write("Введіть тип мотоцикла: ");
+                            string motorcycletype = Console.ReadLine();
+
+                            if (!Validator.IsValidString(motorcycletype))
+                            {
+                                Console.WriteLine("Тип мотоцикла не може бути порожнім.");
+                                break;
+                            }
+
+                            Motorcycle motorcycle = new Motorcycle(
+                                brand, model, year, enginevolume, motorcycletype);
+
+                            if (service.AddVehicle(motorcycle))
+                                Console.WriteLine("Мотоцикл додано.");
+                            else
+                                Console.WriteLine("Не вдалося додати мотоцикл.");
                         }
                         else
                         {
-                            Console.WriteLine("Транспорт з таким ID вже існує.");
+                            Console.WriteLine("Невірний тип транспорту.");
                         }
-                    }
-                    else
-                    {
-                        Console.WriteLine("Невірний тип транспорту.");
+
+                        break;
                     }
 
-                    break;
-
-                case 2:
-                    List<Vehicle> vehicles = service.GetVehicles();
-
-                    if (vehicles.Count == 0)
+                    case 2:
                     {
-                        Console.WriteLine("Транспорт відсутній.");
+                        List<Vehicle> vehicles = service.GetVehicles();
+
+                        if (vehicles.Count == 0)
+                            Console.WriteLine("Транспорт відсутній.");
+                        else
+                            foreach (Vehicle vehicle in vehicles)
+                                Console.WriteLine(vehicle.GetInfo());
+
+                        break;
                     }
-                    else
+
+                    case 3:
                     {
-                        foreach (Vehicle vehicle in vehicles)
+                        Console.Write("Введіть ID транспорту: ");
+
+                        if (!int.TryParse(Console.ReadLine(), out int searchId))
                         {
+                            Console.WriteLine("Введіть коректний ID!");
+                            break;
+                        }
+
+                        Result<Vehicle> result = service.TryFindVehicle(searchId);
+
+                        if (result.IsSuccess)
+                            Console.WriteLine(result.Value.GetInfo());
+                        else
+                            Console.WriteLine(result.Message);
+
+                        break;
+                    }
+
+                    case 4:
+                    {
+                        Console.Write("Введіть марку: ");
+                        string searchBrand = Console.ReadLine();
+
+                        if (!Validator.IsValidString(searchBrand))
+                        {
+                            Console.WriteLine("Марка для пошуку не може бути порожньою.");
+                            break;
+                        }
+
+                        List<Vehicle> vehiclesByBrand =
+                            service.FindVehicleByBrand(searchBrand);
+
+                        if (vehiclesByBrand.Count == 0)
+                            Console.WriteLine("Транспорт не знайдено.");
+                        else
+                            foreach (Vehicle vehicle in vehiclesByBrand)
+                                Console.WriteLine(vehicle.GetInfo());
+
+                        break;
+                    }
+
+                    case 5:
+                    {
+                        Console.Write("Введіть ID транспорту: ");
+
+                        if (!int.TryParse(Console.ReadLine(), out int updateId))
+                        {
+                            Console.WriteLine("Введіть коректний ID!");
+                            break;
+                        }
+
+                        Console.Write("Введіть нову марку: ");
+                        string newBrand = Console.ReadLine();
+
+                        if (!Validator.IsValidString(newBrand))
+                        {
+                            Console.WriteLine("Марка не може бути порожньою.");
+                            break;
+                        }
+
+                        Console.Write("Введіть нову модель: ");
+                        string newModel = Console.ReadLine();
+
+                        if (!Validator.IsValidString(newModel))
+                        {
+                            Console.WriteLine("Модель не може бути порожньою.");
+                            break;
+                        }
+
+                        Console.Write("Введіть новий рік: ");
+
+                        if (!int.TryParse(Console.ReadLine(), out int newYear))
+                        {
+                            Console.WriteLine("Введіть коректний рік.");
+                            break;
+                        }
+
+                        if (!Validator.IsValidYear(newYear))
+                        {
+                            Console.WriteLine("Рік повинен бути від 1886 до поточного року.");
+                            break;
+                        }
+
+                        if (service.UpdateVehicle(updateId, newBrand, newModel, newYear))
+                            Console.WriteLine("Транспорт оновлено.");
+                        else
+                            Console.WriteLine("Транспорт не знайдено.");
+
+                        break;
+                    }
+
+                    case 6:
+                    {
+                        Console.Write("Введіть ID транспорту: ");
+
+                        if (!int.TryParse(Console.ReadLine(), out int deleteId))
+                        {
+                            Console.WriteLine("Введіть коректний ID!");
+                            break;
+                        }
+
+                        if (service.RemoveVehicle(deleteId))
+                            Console.WriteLine("Транспорт видалено.");
+                        else
+                            Console.WriteLine("Не можна видалити транспорт.");
+
+                        break;
+                    }
+
+                    case 7:
+                    {
+                        Console.Write("Введіть ПІБ: ");
+                        string fullname = Console.ReadLine();
+
+                        if (!Validator.IsValidString(fullname))
+                        {
+                            Console.WriteLine("ПІБ не може бути порожнім.");
+                            break;
+                        }
+
+                        Console.Write("Введіть телефон: ");
+                        string phone = Console.ReadLine();
+
+                        if (!Validator.IsValidString(phone))
+                        {
+                            Console.WriteLine("Телефон не може бути порожнім.");
+                            break;
+                        }
+
+                        Owner owner = new Owner(fullname, phone);
+
+                        if (service.AddOwner(owner))
+                            Console.WriteLine("Власника додано.");
+                        else
+                            Console.WriteLine("Не вдалося додати власника.");
+
+                        break;
+                    }
+
+                    case 8:
+                    {
+                        List<Owner> owners = service.GetOwners();
+
+                        if (owners.Count == 0)
+                            Console.WriteLine("Власників немає.");
+                        else
+                            foreach (Owner currentOwner in owners)
+                                Console.WriteLine(currentOwner.GetInfo());
+
+                        break;
+                    }
+
+                    case 9:
+                    {
+                        Console.Write("Введіть ID власника: ");
+
+                        if (!int.TryParse(Console.ReadLine(), out int findOwnerId))
+                        {
+                            Console.WriteLine("Введіть коректний ID!");
+                            break;
+                        }
+
+                        Result<Owner> result = service.TryFindOwner(findOwnerId);
+
+                        if (result.IsSuccess)
+                            Console.WriteLine(result.Value.GetInfo());
+                        else
+                            Console.WriteLine(result.Message);
+
+                        break;
+                    }
+
+                    case 10:
+                    {
+                        Console.Write("Введіть ID власника: ");
+
+                        if (!int.TryParse(Console.ReadLine(), out int updateOwnerId))
+                        {
+                            Console.WriteLine("Введіть коректний ID!");
+                            break;
+                        }
+
+                        Console.Write("Введіть нове ПІБ: ");
+                        string newFullname = Console.ReadLine();
+
+                        if (!Validator.IsValidString(newFullname))
+                        {
+                            Console.WriteLine("ПІБ не може бути порожнім.");
+                            break;
+                        }
+
+                        Console.Write("Введіть новий телефон: ");
+                        string newPhone = Console.ReadLine();
+
+                        if (!Validator.IsValidString(newPhone))
+                        {
+                            Console.WriteLine("Телефон не може бути порожнім.");
+                            break;
+                        }
+
+                        if (service.UpdateOwner(updateOwnerId, newFullname, newPhone))
+                            Console.WriteLine("Власника оновлено.");
+                        else
+                            Console.WriteLine("Власника не знайдено.");
+
+                        break;
+                    }
+
+                    case 11:
+                    {
+                        Console.Write("Введіть ID власника: ");
+
+                        if (!int.TryParse(Console.ReadLine(), out int deleteOwnerId))
+                        {
+                            Console.WriteLine("Введіть коректний ID!");
+                            break;
+                        }
+
+                        if (service.RemoveOwner(deleteOwnerId))
+                            Console.WriteLine("Власника видалено.");
+                        else
+                            Console.WriteLine("Не можна видалити власника.");
+
+                        break;
+                    }
+
+                    case 12:
+                    {
+                        Console.Write("Введіть ID транспорту: ");
+
+                        if (!int.TryParse(Console.ReadLine(), out int vehicleId))
+                        {
+                            Console.WriteLine("Введіть коректний ID!");
+                            break;
+                        }
+
+                        Console.Write("Введіть ID власника: ");
+
+                        if (!int.TryParse(Console.ReadLine(), out int ownerIdForVehicle))
+                        {
+                            Console.WriteLine("Введіть коректний ID!");
+                            break;
+                        }
+
+                        if (service.AssignOwner(vehicleId, ownerIdForVehicle))
+                            Console.WriteLine("Власника призначено.");
+                        else
+                            Console.WriteLine("Не вдалося призначити власника.");
+
+                        break;
+                    }
+
+                    case 13:
+                    {
+                        Console.Write("Введіть ID транспорту: ");
+
+                        if (!int.TryParse(Console.ReadLine(), out int vehicleIdForRemove))
+                        {
+                            Console.WriteLine("Введіть коректний ID!");
+                            break;
+                        }
+
+                        if (service.RemoveOwnerFromVehicle(vehicleIdForRemove))
+                            Console.WriteLine("Власника відкріплено.");
+                        else
+                            Console.WriteLine("Не вдалося відкріпити власника.");
+
+                        break;
+                    }
+
+                    case 14:
+                        report.ExportToCsv(service.GetVehicles());
+                        break;
+
+                    case 15:
+                        report.ReadFromCsv();
+                        break;
+
+                    case 16:
+                    {
+                        Console.WriteLine("1. Пошук транспорту через виняток");
+                        Console.WriteLine("2. Пошук власника через виняток");
+                        Console.Write("Виберіть дію: ");
+
+                        if (!int.TryParse(Console.ReadLine(), out int exceptionChoice))
+                        {
+                            Console.WriteLine("Введіть коректне число.");
+                            break;
+                        }
+
+                        if (exceptionChoice == 1)
+                        {
+                            Console.Write("Введіть ID транспорту: ");
+
+                            if (!int.TryParse(Console.ReadLine(), out int vehicleId))
+                            {
+                                Console.WriteLine("Введіть коректний ID.");
+                                break;
+                            }
+
+                            Vehicle vehicle = service.FindVehicle(vehicleId);
                             Console.WriteLine(vehicle.GetInfo());
                         }
-                    }
-
-                    break;
-
-                case 3:
-                    Console.Write("Введіть ID транспорту: ");
-                    int searchId = int.Parse(Console.ReadLine());
-
-                    Vehicle vehicleById = service.FindVehicle(searchId);
-
-                    if (vehicleById == null)
-                    {
-                        Console.WriteLine("Транспорт не знайдено.");
-                    }
-                    else
-                    {
-                        Console.WriteLine(vehicleById.GetInfo());
-                    }
-
-                    break;
-
-                case 4:
-                    Console.Write("Введіть марку: ");
-                    string searchBrand = Console.ReadLine();
-
-                    List<Vehicle> result = service.FindVehicleByBrand(searchBrand);
-
-                    if (result.Count == 0)
-                    {
-                        Console.WriteLine("Транспорт не знайдено.");
-                    }
-                    else
-                    {
-                        foreach (Vehicle vehicle in result)
+                        else if (exceptionChoice == 2)
                         {
-                            Console.WriteLine(vehicle.GetInfo());
+                            Console.Write("Введіть ID власника: ");
+
+                            if (!int.TryParse(Console.ReadLine(), out int ownerId))
+                            {
+                                Console.WriteLine("Введіть коректний ID.");
+                                break;
+                            }
+
+                            Owner owner = service.FindOwner(ownerId);
+                            Console.WriteLine(owner.GetInfo());
                         }
-                    }
-
-                    break;
-
-                case 5:
-                    Console.Write("Введіть ID транспорту: ");
-                    int updateId = int.Parse(Console.ReadLine());
-
-                    Console.Write("Введіть нову марку: ");
-                    string newBrand = Console.ReadLine();
-                    if (!Validator.IsValidString(newBrand))
-                    {
-                        Console.WriteLine("Марка не може бути порожньою.");
-                        break;
-                    }
-
-                    Console.Write("Введіть нову модель: ");
-                    string newModel = Console.ReadLine();
-                    if (!Validator.IsValidString(newModel))
-                    {
-                        Console.WriteLine("Модель не може бути порожньою.");
-                        break; 
-                    }
-
-                    Console.Write("Введіть новий рік: ");
-                    int newYear = int.Parse(Console.ReadLine());
-                    if (!Validator.IsValidYear(newYear))
-                    {
-                        Console.WriteLine("Рік повинен бути від 1990 до 2026.");
-                        break;
-                    }
-
-                    if (service.UpdateVehicle(updateId, newBrand, newModel, newYear))
-                    {
-                        Console.WriteLine("Транспорт оновлено.");
-                    }
-                    else
-                    {
-                        Console.WriteLine("Транспорт не знайдено.");
-                    }
-
-                    break;
-
-                case 6:
-                    Console.Write("Введіть ID транспорту: ");
-                    int deleteId = int.Parse(Console.ReadLine());
-
-                    if (service.RemoveVehicle(deleteId))
-                    {
-                        Console.WriteLine("Транспорт видалено.");
-                    }
-                    else
-                    {
-                        Console.WriteLine("Не можна видалити транспорт.");
-                    }
-
-                    break;
-
-                case 7:
-
-                    Console.Write("Введіть ПІБ: ");
-                    string fullname = Console.ReadLine();
-                    if (!Validator.IsValidString(fullname))
-                    {
-                        Console.WriteLine("ПІБ не може бути порожнім.");
-                        break;
-                    }
-
-                    Console.Write("Введіть телефон: ");
-                    string phone = Console.ReadLine();
-                    if (!Validator.IsValidString(phone))
-                    {
-                        Console.WriteLine("Телефон не може бути порожнім.");
-                        break;
-                    }
-
-                    Owner owner = new Owner( fullname, phone);
-
-                    if (service.AddOwner(owner))
-                    {
-                        Console.WriteLine("Власника додано.");
-                    }
-                    else
-                    {
-                        Console.WriteLine("Власник з таким ID вже існує.");
-                    }
-
-                    break;
-
-                case 8:
-                    List<Owner> owners = service.GetOwners();
-
-                    if (owners.Count == 0)
-                    {
-                        Console.WriteLine("Власників немає.");
-                    }
-                    else
-                    {
-                        foreach (Owner currentOwner in owners)
+                        else
                         {
-                            Console.WriteLine(currentOwner.GetInfo());
+                            Console.WriteLine("Невірний пункт меню.");
                         }
-                    }
 
-                    break;
-
-                case 9:
-                    Console.Write("Введіть ID власника: ");
-                    int findOwnerId = int.Parse(Console.ReadLine());
-
-                    Owner foundOwner = service.FindOwner(findOwnerId);
-
-                    if (foundOwner == null)
-                    {
-                        Console.WriteLine("Власника не знайдено.");
-                    }
-                    else
-                    {
-                        Console.WriteLine(foundOwner.GetInfo());
-                    }
-
-                    break;
-
-                case 10:
-                    Console.Write("Введіть ID власника: ");
-                    int updateOwnerId = int.Parse(Console.ReadLine());
-
-                    Console.Write("Введіть нове ПІБ: ");
-                    string newFullname = Console.ReadLine();
-                    if (!Validator.IsValidString(newFullname))
-                    {
-                        Console.WriteLine("ПІБ не може бути порожнім.");
                         break;
                     }
-
-                    Console.Write("Введіть новий телефон: ");
-                    string newPhone = Console.ReadLine();
-                    if (!Validator.IsValidString(newPhone))
-                    {
-                        Console.WriteLine("Телефон не може бути порожнім.");
+                    case 0:
+                        work = false;
+                        Console.WriteLine("Програму завершено.");
                         break;
-                    }
 
-                    if (service.UpdateOwner(updateOwnerId, newFullname, newPhone))
-                    {
-                        Console.WriteLine("Власника оновлено.");
-                    }
-                    else
-                    {
-                        Console.WriteLine("Власника не знайдено.");
-                    }
-
-                    break;
-
-                case 11:
-                    Console.Write("Введіть ID власника: ");
-                    int deleteOwnerId = int.Parse(Console.ReadLine());
-
-                    if (service.RemoveOwner(deleteOwnerId))
-                    {
-                        Console.WriteLine("Власника видалено.");
-                    }
-                    else
-                    {
-                        Console.WriteLine("Не можна видалити власника.");
-                    }
-                    break;
-
-                case 12:
-                    Console.Write("Введіть ID транспорту: ");
-                    int vehicleId = int.Parse(Console.ReadLine());
-
-                    Console.Write("Введіть ID власника: ");
-                    int ownerIdForVehicle = int.Parse(Console.ReadLine());
-
-                    if (service.AssignOwner(vehicleId, ownerIdForVehicle))
-                    {
-                        Console.WriteLine("Власника призначено.");
-                    }
-                    else
-                    {
-                        Console.WriteLine("Не вдалося призначити власника.");
-                    }
-                    break;
-
-                case 13:
-                    Console.Write("Введіть ID транспорту: ");
-                    int vehicleIdForRemove = int.Parse(Console.ReadLine());
-
-                    if (service.RemoveOwnerFromVehicle(vehicleIdForRemove))
-                    {
-                        Console.WriteLine("Власника відкріплено.");
-                    }
-                    else
-                    {
-                        Console.WriteLine("Не вдалося відкріпити власника.");
-                    }
-                    break;
-                
-                case 14:
-                    report.ExportToCsv(service.GetVehicles());
-                    Console.WriteLine("Звіт створено. ");
-                    break;
-                case 15:
-                    report.ReadFromCsv();
-                    break;
-                case 0:
-                    work = false;
-                    Console.WriteLine("Програму завершено.");
-                    break;
-
-                default:
-                    Console.WriteLine("Невірний пункт меню.");
-                    break;
+                    default:
+                        Console.WriteLine("Невірний пункт меню.");
+                        break;
+                }
+            }
+            catch (InvalidVehicleDataException ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+            catch (VehicleNotFoundException ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+            catch (OwnerNotFoundException ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+            catch (ArgumentException ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+            catch (IOException)
+            {
+                Console.WriteLine("Помилка роботи з файлом.");
             }
         }
     }
