@@ -12,6 +12,23 @@ class Entity
         set { id = value; }
     }
 }
+static class SafeExecutor
+{
+    public static void Run(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            File.AppendAllText("log.txt", $"{DateTime.Now}: {ex.GetType().Name}: {ex.Message}\n");
+
+            Console.WriteLine("Сталася помилка. Деталі записано у log.txt");
+        }
+    }
+}
+
 
 class InvalidVehicleDataException : Exception
 {
@@ -587,22 +604,22 @@ class PR1
                 Console.WriteLine("Введіть число!");
                 continue;
             }
-
-            try
-            {
-                switch (choice)
+            
+            SafeExecutor.Run(() =>
                 {
-                    case 1:
+                    switch (choice)
                     {
-                        Console.WriteLine("1. Автомобіль");
-                        Console.WriteLine("2. Мотоцикл");
-                        Console.Write("Виберіть тип: ");
-
-                        if (!int.TryParse(Console.ReadLine(), out int type))
+                        case 1:
                         {
-                            Console.WriteLine("Введіть коректний тип.");
-                            break;
-                        }
+                            Console.WriteLine("1. Автомобіль");
+                            Console.WriteLine("2. Мотоцикл");
+                            Console.Write("Виберіть тип: ");
+
+                            if (!int.TryParse(Console.ReadLine(), out int type))
+                            {
+                                Console.WriteLine("Введіть коректний тип.");
+                                break;
+                            }
 
                         Console.Write("Введіть марку: ");
                         string brand = Console.ReadLine();
@@ -1055,28 +1072,9 @@ class PR1
                     default:
                         Console.WriteLine("Невірний пункт меню.");
                         break;
-                }
-            }
-            catch (InvalidVehicleDataException ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
-            catch (VehicleNotFoundException ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
-            catch (OwnerNotFoundException ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
-            catch (ArgumentException ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
-            catch (IOException)
-            {
-                Console.WriteLine("Помилка роботи з файлом.");
-            }
+                    }
+                });
         }
     }
 }
+              
