@@ -398,14 +398,57 @@ class Repository<T> where T : Entity
     }
 }
 
+class NotificationService
+{
+    public void ShowMessage(string message)
+    {
+        Console.WriteLine("[Подія] " + message);
+    }
+}
+
+class EventLogService
+{
+    public void WriteLog(string message)
+    {
+        File.AppendAllText("log.txt",
+            $"{DateTime.Now}: {message}{Environment.NewLine}");
+    }
+}
+
 class VehicleService
 {
     private Repository<Vehicle> vehicles = new Repository<Vehicle>();
     private Repository<Owner> owners = new Repository<Owner>();
     public event Action<Vehicle, Owner> OwnerAssigned;
+    
+    
+    public event Action<string> VehicleAdded;
+    public event Action<string> VehicleUpdated;
+    public event Action<string> VehicleRemoved;
+    public event Action<string> OperationFailed;
+
+   
     public bool AddVehicle(Vehicle vehicle)
     {
-        return vehicles.Add(vehicle);
+        if (vehicle == null)
+        {
+            OperationFailed?.Invoke("Спроба додати порожній транспорт");
+            return false;
+        }
+
+        bool result = vehicles.Add(vehicle);
+
+        if (result)
+        {
+            VehicleAdded?.Invoke(
+                $"Додано транспорт: {vehicle.Brand} {vehicle.Model}, ID: {vehicle.Id}");
+        }
+        else
+        {
+            OperationFailed?.Invoke("Не вдалося додати транспорт");
+        }
+
+        return result;
     }
     
     public List<Vehicle> FilterVehicles(Predicate<Vehicle> condition)
@@ -487,38 +530,79 @@ class VehicleService
         return result;
     }
 
+    
     public bool UpdateVehicle(int id, string brand, string model, int year)
     {
         Vehicle vehicle = vehicles.Find(id);
 
         if (vehicle == null)
+        {
+            OperationFailed?.Invoke($"Транспорт з ID {id} не знайдено");
             return false;
+        }
 
         if (!Validator.IsValidYear(year))
+        {
+            OperationFailed?.Invoke("Некоректний рік випуску");
             throw new InvalidVehicleDataException("Некоректний рік випуску!");
+        }
 
         if (!Validator.IsValidString(brand))
+        {
+            OperationFailed?.Invoke("Марка не може бути порожньою");
             throw new InvalidVehicleDataException("Марка не може бути порожньою.");
+        }
 
         if (!Validator.IsValidString(model))
+        {
+            OperationFailed?.Invoke("Модель не може бути порожньою");
             throw new InvalidVehicleDataException("Модель не може бути порожньою.");
+        }
 
         vehicle.Brand = brand;
         vehicle.Model = model;
         vehicle.Year = year;
 
+        VehicleUpdated?.Invoke(
+            $"Оновлено транспорт: {vehicle.Brand} {vehicle.Model}, ID: {id}");
+
         return true;
     }
 
+
+    
     public bool RemoveVehicle(int id)
     {
         Vehicle vehicle = vehicles.Find(id);
 
-        if (vehicle == null || vehicle.Owner != null)
+        if (vehicle == null)
+        {
+            OperationFailed?.Invoke($"Транспорт з ID {id} не знайдено");
             return false;
+        }
 
-        return vehicles.Remove(id);
+        if (vehicle.Owner != null)
+        {
+            OperationFailed?.Invoke(
+                $"Не можна видалити транспорт ID {id}, оскільки він має власника");
+            return false;
+        }
+
+        bool result = vehicles.Remove(id);
+
+        if (result)
+        {
+            VehicleRemoved?.Invoke(
+                $"Видалено транспорт: {vehicle.Brand} {vehicle.Model}, ID: {id}");
+        }
+        else
+        {
+            OperationFailed?.Invoke($"Не вдалося видалити транспорт ID {id}");
+        }
+
+        return result;
     }
+
 
     public bool AddOwner(Owner owner)
     {
@@ -612,6 +696,23 @@ class PR1
         VehicleService service = new VehicleService();
         ReportService report = new ReportService();
         
+        
+        NotificationService notification = new NotificationService();
+        EventLogService eventLogger = new EventLogService();
+
+        service.VehicleAdded += notification.ShowMessage;
+        service.VehicleAdded += eventLogger.WriteLog;
+
+        service.VehicleUpdated += notification.ShowMessage;
+        service.VehicleUpdated += eventLogger.WriteLog;
+
+        service.VehicleRemoved += notification.ShowMessage;
+        service.VehicleRemoved += eventLogger.WriteLog;
+
+        service.OperationFailed += notification.ShowMessage;
+        service.OperationFailed += eventLogger.WriteLog;
+
+        
         service.OwnerAssigned += (vehicle, owner) =>
         {
             Console.WriteLine(
@@ -649,6 +750,7 @@ class PR1
             Console.WriteLine("15. Прочитати звіт");
             Console.WriteLine("16. Демонстрація винятку");
             Console.WriteLine("17. Демонстрація делегатів");
+            Console.WriteLine("18. Демонстрація подій");
             Console.WriteLine("0. Вихід");
             Console.Write("Виберіть дію: ");
 
@@ -674,7 +776,7 @@ class PR1
                                 break;
                             }
 
-                        Console.Write("Введіть марку: ");
+                            Console.Write("Введіть марку: ");
                         string brand = Console.ReadLine();
 
                         if (!Validator.IsValidString(brand))
@@ -1150,6 +1252,27 @@ class PR1
 
                             break;
                         }
+                        
+                        case 18:
+                        {
+                            Console.WriteLine("=== Демонстрація подій ===");
+
+                            Car car = new Car("BMW", "X5", 2022, 5, "Diesel");
+
+                            service.AddVehicle(car);
+
+                            service.UpdateVehicle(car.Id, "BMW", "X6", 2023);
+
+                            service.RemoveVehicle(9999);
+
+                            service.RemoveVehicle(car.Id);
+
+                            Console.WriteLine("Демонстрацію завершено.");
+                            Console.WriteLine("Перевірте файл log.txt");
+
+                            break;
+                        }
+
 
                     case 0:
                         work = false;
