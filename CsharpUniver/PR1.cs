@@ -773,6 +773,7 @@ class PR1
             Console.WriteLine("17. Демонстрація делегатів");
             Console.WriteLine("18. Демонстрація подій");
             Console.WriteLine("19. Демонстрація інтерфейсів та ітерації");
+            Console.WriteLine("20. Демонстрація власної колекції");
             Console.WriteLine("0. Вихід");
             Console.Write("Виберіть дію: ");
 
@@ -1316,6 +1317,54 @@ class PR1
 
                             notification.ShowMessage("Перебір колекції завершено");
                             eventLogger.WriteLog("Перебір колекції завершено");
+
+                            break;
+                        }
+                        
+                        case 20:
+                        {
+                            Console.WriteLine("=== Демонстрація власної колекції ===");
+
+                            Repository<Vehicle> collection = new Repository<Vehicle>();
+
+                            Car car1 = new Car("BMW", "X5", 2022, 5, "Diesel");
+                            Car car2 = new Car("Audi", "A6", 2021, 4, "Petrol");
+                            Motorcycle moto = new Motorcycle("Honda", "CBR", 2023, 600, "Sport");
+
+                            collection.Add(car1);
+                            collection.Add(car2);
+                            collection.Add(moto);
+
+                            Console.WriteLine("\n=== Всі транспортні засоби ===");
+
+                            foreach (Vehicle vehicle in collection)
+                            {
+                                Console.WriteLine(vehicle.GetInfo());
+                            }
+
+                            Console.WriteLine("\n=== Пошук транспорту за ID ===");
+
+                            Vehicle found = collection.Find(car1.Id);
+
+                            if (found != null)
+                            {
+                                Console.WriteLine("Знайдено: " + found.GetInfo());
+                            }
+                            else
+                            {
+                                Console.WriteLine("Транспорт не знайдено.");
+                            }
+
+                            Console.WriteLine("\n=== Пошук неіснуючого транспорту ===");
+
+                            Vehicle notFound = collection.Find(9999);
+
+                            if (notFound == null)
+                            {
+                                Console.WriteLine("Транспорт з ID 9999 не знайдено.");
+                            }
+
+                            Console.WriteLine("\nДемонстрацію завершено.");
 
                             break;
                         }
