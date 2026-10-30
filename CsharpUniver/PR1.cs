@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-
+using System.Collections;
 class Entity
 {
     private int id;
@@ -351,7 +351,7 @@ class Owner : Entity
     }
 }
 
-class Repository<T> where T : Entity
+class Repository<T> : IEnumerable<T> where T : Entity
 {
     private List<T> entities = new List<T>();
 
@@ -396,9 +396,31 @@ class Repository<T> where T : Entity
     {
         return entities;
     }
+    
+    public IEnumerator<T> GetEnumerator()
+    {
+        foreach (T item in entities)
+        {
+            yield return item;
+        }
+    }
+
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        return GetEnumerator();
+    }
+}
+interface INotificationService
+{
+    void ShowMessage(string message);
 }
 
-class NotificationService
+interface IEventLogger
+{
+    void WriteLog(string message);
+}
+
+class NotificationService : INotificationService
 {
     public void ShowMessage(string message)
     {
@@ -406,7 +428,7 @@ class NotificationService
     }
 }
 
-class EventLogService
+class EventLogService : IEventLogger
 {
     public void WriteLog(string message)
     {
@@ -477,13 +499,12 @@ class VehicleService
 
     public void ProcessVehicles(Action<Vehicle> action)
     {
-        foreach (Vehicle vehicle in vehicles.GetAll())
+        foreach (Vehicle vehicle in vehicles)
         {
             action(vehicle);
         }
     }
-
-
+    
     public Result<Owner> TryFindOwner(int id)
     {
         Owner owner = owners.Find(id);
@@ -697,8 +718,8 @@ class PR1
         ReportService report = new ReportService();
         
         
-        NotificationService notification = new NotificationService();
-        EventLogService eventLogger = new EventLogService();
+        INotificationService notification = new NotificationService();
+        IEventLogger eventLogger = new EventLogService();
 
         service.VehicleAdded += notification.ShowMessage;
         service.VehicleAdded += eventLogger.WriteLog;
@@ -751,6 +772,7 @@ class PR1
             Console.WriteLine("16. Демонстрація винятку");
             Console.WriteLine("17. Демонстрація делегатів");
             Console.WriteLine("18. Демонстрація подій");
+            Console.WriteLine("19. Демонстрація інтерфейсів та ітерації");
             Console.WriteLine("0. Вихід");
             Console.Write("Виберіть дію: ");
 
@@ -1272,7 +1294,31 @@ class PR1
 
                             break;
                         }
+                        case 19:
+                        {
+                            Console.WriteLine("=== Демонстрація інтерфейсів ===");
 
+                            notification.ShowMessage("Початок демонстрації");
+                            eventLogger.WriteLog("Початок демонстрації інтерфейсів");
+
+                            Console.WriteLine("=== Демонстрація IEnumerable та yield return ===");
+
+                            Repository<Vehicle> collection = new Repository<Vehicle>();
+
+                            collection.Add(new Car("BMW", "X5", 2022, 5, "Diesel"));
+                            collection.Add(new Car("Audi", "A6", 2021, 4, "Petrol"));
+                            collection.Add(new Motorcycle("Honda", "CBR", 2023, 600, "Sport"));
+
+                            foreach (Vehicle vehicle in collection)
+                            {
+                                Console.WriteLine(vehicle.GetInfo());
+                            }
+
+                            notification.ShowMessage("Перебір колекції завершено");
+                            eventLogger.WriteLog("Перебір колекції завершено");
+
+                            break;
+                        }
 
                     case 0:
                         work = false;
