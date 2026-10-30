@@ -402,11 +402,44 @@ class VehicleService
 {
     private Repository<Vehicle> vehicles = new Repository<Vehicle>();
     private Repository<Owner> owners = new Repository<Owner>();
-
+    public event Action<Vehicle, Owner> OwnerAssigned;
     public bool AddVehicle(Vehicle vehicle)
     {
         return vehicles.Add(vehicle);
     }
+    
+    public List<Vehicle> FilterVehicles(Predicate<Vehicle> condition)
+    {
+        List<Vehicle> result = new List<Vehicle>();
+
+        foreach (Vehicle vehicle in vehicles.GetAll())
+        {
+            if (condition(vehicle))
+            {
+                result.Add(vehicle);
+            }
+        }
+
+        return result;
+    }
+
+    public List<Vehicle> SortVehicles(Func<Vehicle, int> selector)
+    {
+        List<Vehicle> result = new List<Vehicle>(vehicles.GetAll());
+
+        result.Sort((a, b) => selector(a).CompareTo(selector(b)));
+
+        return result;
+    }
+
+    public void ProcessVehicles(Action<Vehicle> action)
+    {
+        foreach (Vehicle vehicle in vehicles.GetAll())
+        {
+            action(vehicle);
+        }
+    }
+
 
     public Result<Owner> TryFindOwner(int id)
     {
@@ -534,6 +567,7 @@ class VehicleService
         return owners.Remove(id);
     }
 
+    
     public bool AssignOwner(int vehicleId, int ownerId)
     {
         Vehicle vehicle = vehicles.Find(vehicleId);
@@ -543,6 +577,9 @@ class VehicleService
             return false;
 
         vehicle.Owner = owner;
+
+        OwnerAssigned?.Invoke(vehicle, owner);
+
         return true;
     }
 
@@ -574,6 +611,21 @@ class PR1
     {
         VehicleService service = new VehicleService();
         ReportService report = new ReportService();
+        
+        service.OwnerAssigned += (vehicle, owner) =>
+        {
+            Console.WriteLine(
+                $"Подія: {owner.Fullname} став власником {vehicle.Brand} {vehicle.Model}"
+            );
+        };
+
+        service.OwnerAssigned += (vehicle, owner) =>
+        {
+            File.AppendAllText("log.txt",
+                $"{DateTime.Now}: {owner.Fullname} став власником {vehicle.Brand} {vehicle.Model}\n"
+            );
+        };
+
         bool work = true;
 
         while (work)
@@ -596,6 +648,7 @@ class PR1
             Console.WriteLine("14. Створити звіт");
             Console.WriteLine("15. Прочитати звіт");
             Console.WriteLine("16. Демонстрація винятку");
+            Console.WriteLine("17. Демонстрація делегатів");
             Console.WriteLine("0. Вихід");
             Console.Write("Виберіть дію: ");
 
@@ -1064,6 +1117,40 @@ class PR1
 
                         break;
                     }
+                    
+                        case 17:
+                        {
+                            Console.WriteLine("=== Predicate ===");
+
+                            List<Vehicle> filtered = service.FilterVehicles(
+                                v => v.Year >= 2020
+                            );
+
+                            foreach (Vehicle vehicle in filtered)
+                            {
+                                Console.WriteLine(vehicle.GetInfo());
+                            }
+
+                            Console.WriteLine("=== Func ===");
+
+                            List<Vehicle> sorted = service.SortVehicles(
+                                v => v.Year
+                            );
+
+                            foreach (Vehicle vehicle in sorted)
+                            {
+                                Console.WriteLine(vehicle.GetInfo());
+                            }
+
+                            Console.WriteLine("=== Action ===");
+
+                            service.ProcessVehicles(
+                                v => Console.WriteLine(v.GetInfo())
+                            );
+
+                            break;
+                        }
+
                     case 0:
                         work = false;
                         Console.WriteLine("Програму завершено.");
