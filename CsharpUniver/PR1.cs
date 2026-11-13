@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Collections;
 class Entity
 {
@@ -58,6 +59,97 @@ class Result<T>
         Value = value;
     }
 }
+
+class AnalyticsService
+{
+    public void Run(List<Vehicle> vehicles)
+    {
+        Console.WriteLine("\n===== LINQ АНАЛІТИКА =====");
+
+        Console.WriteLine("\n=== Фільтрація ===");
+
+        var filtered = vehicles.Where(v => v.Year >= 2020);
+
+        foreach (var vehicle in filtered)
+            Console.WriteLine(vehicle.GetInfo());
+
+        Console.WriteLine("\n=== Сортування ===");
+
+        var sorted = vehicles.OrderBy(v => v.Year);
+
+        foreach (var vehicle in sorted)
+            Console.WriteLine(vehicle.GetInfo());
+
+        Console.WriteLine("\n=== Проєкція ===");
+
+        var projected = vehicles.Select(v => new
+        {
+            v.Brand,
+            v.Model,
+            v.Year,
+            OwnerName = v.Owner == null ? "Без власника" : v.Owner.Fullname
+        });
+
+        foreach (var item in projected)
+            Console.WriteLine($"{item.Brand} {item.Model}, {item.Year}, {item.OwnerName}");
+
+        Console.WriteLine("\n=== Агрегування ===");
+
+        int total = vehicles.Count();
+        int withOwner = vehicles.Count(v => v.Owner != null);
+        int withoutOwner = vehicles.Count(v => v.Owner == null);
+
+        double averageYear = total > 0 ? vehicles.Average(v => v.Year) : 0;
+
+        int totalEngineVolume = vehicles
+            .OfType<Motorcycle>()
+            .Sum(m => m.Enginevolume);
+
+        Console.WriteLine($"Всього транспорту: {total}");
+        Console.WriteLine($"З власником: {withOwner}");
+        Console.WriteLine($"Без власника: {withoutOwner}");
+        Console.WriteLine($"Середній рік: {averageYear:F2}");
+        Console.WriteLine($"Загальний об'єм двигунів: {totalEngineVolume}");
+
+        Console.WriteLine("\n=== Групування ===");
+
+        var grouped = vehicles.GroupBy(v =>
+            v is Car ? "Автомобілі" :
+            v is Motorcycle ? "Мотоцикли" : "Інше");
+
+        foreach (var group in grouped)
+        {
+            Console.WriteLine($"\nТип: {group.Key}");
+            Console.WriteLine($"Кількість: {group.Count()}");
+            Console.WriteLine($"Середній рік: {group.Average(v => v.Year):F2}");
+            Console.WriteLine($"Мінімальний рік: {group.Min(v => v.Year)}");
+            Console.WriteLine($"Максимальний рік: {group.Max(v => v.Year)}");
+        }
+
+        Console.WriteLine("\n=== Deferred Execution та ToList() ===");
+
+        List<Vehicle> demoVehicles = new List<Vehicle>(vehicles);
+
+        var deferredQuery = demoVehicles.Where(v => v.Year >= 2020);
+
+        var materializedQuery = demoVehicles
+            .Where(v => v.Year >= 2020)
+            .ToList();
+
+        int before = deferredQuery.Count();
+
+        demoVehicles.Add(new Car("Demo", "Deferred", 2024, 4, "Petrol"));
+
+        int after = deferredQuery.Count();
+
+        Console.WriteLine($"До додавання: {before}");
+        Console.WriteLine($"Після додавання (Deferred): {after}");
+        Console.WriteLine($"Матеріалізований результат: {materializedQuery.Count}");
+
+        Console.WriteLine("\n===== АНАЛІТИКУ ЗАВЕРШЕНО =====");
+    }
+}
+
 
 class ReportService
 {
@@ -774,6 +866,7 @@ class PR1
             Console.WriteLine("18. Демонстрація подій");
             Console.WriteLine("19. Демонстрація інтерфейсів та ітерації");
             Console.WriteLine("20. Демонстрація власної колекції");
+            Console.WriteLine("21. LINQ-аналітика");
             Console.WriteLine("0. Вихід");
             Console.Write("Виберіть дію: ");
 
@@ -1368,7 +1461,12 @@ class PR1
 
                             break;
                         }
-
+                        case 21:
+                        {
+                            AnalyticsService analytics = new AnalyticsService();
+                            analytics.Run(service.GetVehicles());
+                            break;
+                        }
                     case 0:
                         work = false;
                         Console.WriteLine("Програму завершено.");
