@@ -148,6 +148,44 @@ class AnalyticsService
 
         Console.WriteLine("\n===== АНАЛІТИКУ ЗАВЕРШЕНО =====");
     }
+    public void GenerateReport(List<Vehicle> vehicles)
+    {
+        Console.WriteLine("\n===== АНАЛІТИЧНИЙ ЗВІТ =====");
+
+        Console.WriteLine($"Загальна кількість транспорту: {vehicles.Count}");
+
+        int withOwner = vehicles.Count(v => v.Owner != null);
+        int withoutOwner = vehicles.Count(v => v.Owner == null);
+
+        Console.WriteLine($"Транспорт із власником: {withOwner}");
+        Console.WriteLine($"Транспорт без власника: {withoutOwner}");
+
+        Console.WriteLine("\n=== Статистика за типами транспорту ===");
+
+        var statistics = vehicles
+            .GroupBy(v =>
+                v is Car ? "Автомобілі" :
+                v is Motorcycle ? "Мотоцикли" : "Інше")
+            .Select(g => new
+            {
+                Type = g.Key,
+                Count = g.Count(),
+                AverageYear = g.Average(v => v.Year),
+                MinYear = g.Min(v => v.Year),
+                MaxYear = g.Max(v => v.Year)
+            });
+
+        foreach (var item in statistics)
+        {
+            Console.WriteLine($"\nТип: {item.Type}");
+            Console.WriteLine($"Кількість: {item.Count}");
+            Console.WriteLine($"Середній рік: {item.AverageYear:F2}");
+            Console.WriteLine($"Найстаріший рік: {item.MinYear}");
+            Console.WriteLine($"Найновіший рік: {item.MaxYear}");
+        }
+
+        Console.WriteLine("\n===== ЗВІТ ЗАВЕРШЕНО =====");
+    }
 }
 
 
@@ -867,6 +905,7 @@ class PR1
             Console.WriteLine("19. Демонстрація інтерфейсів та ітерації");
             Console.WriteLine("20. Демонстрація власної колекції");
             Console.WriteLine("21. LINQ-аналітика");
+            Console.WriteLine("22. Сформувати аналітичний звіт");
             Console.WriteLine("0. Вихід");
             Console.Write("Виберіть дію: ");
 
@@ -1465,6 +1504,12 @@ class PR1
                         {
                             AnalyticsService analytics = new AnalyticsService();
                             analytics.Run(service.GetVehicles());
+                            break;
+                        }
+                        case 22:
+                        {
+                            AnalyticsService analytics = new AnalyticsService();
+                            analytics.GenerateReport(service.GetVehicles());
                             break;
                         }
                     case 0:
