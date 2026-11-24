@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Collections;
 class Entity
 {
@@ -11,6 +13,76 @@ class Entity
     {
         get { return id; }
         set { id = value; }
+    }
+}
+class AsyncReportService
+{
+    public async Task ExportAsync(List<Vehicle> vehicles, CancellationToken token)
+    {
+        string path = "report_async_new.csv";
+
+        try
+        {
+            using (StreamWriter writer = new StreamWriter(path))
+            {
+                await writer.WriteLineAsync("Id,Brand,Model,Year,Owner");
+
+                foreach (Vehicle vehicle in vehicles)
+                {
+                    token.ThrowIfCancellationRequested();
+
+                    string owner = vehicle.Owner == null
+                        ? "none"
+                        : vehicle.Owner.Fullname;
+
+                    await writer.WriteLineAsync(
+                        $"{vehicle.Id},{vehicle.Brand},{vehicle.Model},{vehicle.Year},{owner}");
+
+                    await writer.FlushAsync();
+
+                    await Task.Delay(200, token);
+                }
+            }
+
+            Console.WriteLine("Асинхронний звіт успішно створено.");
+        }
+        catch (OperationCanceledException)
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+
+            Console.WriteLine("Створення звіту скасовано.");
+        }
+        catch (Exception ex)
+        {
+            await File.AppendAllTextAsync(
+                "log.txt",
+                $"{DateTime.Now}: {ex.GetType().Name}: {ex.Message}\n");
+
+            Console.WriteLine("Помилка створення звіту.");
+        }
+    }
+
+    public async Task ReadAsync(CancellationToken token)
+    {
+        try
+        {
+            string text = await File.ReadAllTextAsync(
+                "report_async_new.csv", token);
+
+            Console.WriteLine("\n===== ASYNC CSV REPORT =====");
+            Console.WriteLine(text);
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine("Читання звіту скасовано.");
+        }
+        catch (Exception ex)
+        {
+            await File.AppendAllTextAsync("log.txt", $"{DateTime.Now}: {ex.GetType().Name}: {ex.Message}\n");
+
+            Console.WriteLine("Помилка читання звіту.");
+        }
     }
 }
 static class SafeExecutor
@@ -23,7 +95,23 @@ static class SafeExecutor
         }
         catch (Exception ex)
         {
-            File.AppendAllText("log.txt", $"{DateTime.Now}: {ex.GetType().Name}: {ex.Message}\n");
+            File.AppendAllText("log.txt",
+                $"{DateTime.Now}: {ex.GetType().Name}: {ex.Message}\n");
+
+            Console.WriteLine("Сталася помилка. Деталі записано у log.txt");
+        }
+    }
+
+    public static async Task RunAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            File.AppendAllText("log.txt",
+                $"{DateTime.Now}: {ex.GetType().Name}: {ex.Message}\n");
 
             Console.WriteLine("Сталася помилка. Деталі записано у log.txt");
         }
@@ -44,6 +132,77 @@ class VehicleNotFoundException : Exception
 class OwnerNotFoundException : Exception
 {
     public OwnerNotFoundException(string msg) : base(msg) { }
+}
+
+
+class TaskParallelBatchDemo
+{
+    public async Task RunAsync(List<Vehicle> vehicles)
+    {
+        Console.WriteLine("\n===== BATCH PARALLEL PROCESSING =====");
+
+        if (vehicles.Count == 0)
+        {
+            Console.WriteLine("Немає транспорту для обробки.");
+            return;
+        }
+
+        Console.WriteLine($"Кількість транспортних засобів: {vehicles.Count}");
+
+        using (CancellationTokenSource cts = new CancellationTokenSource())
+        {
+            CancellationToken token = cts.Token;
+
+            Task[] tasks = vehicles.Select((vehicle, index) =>
+                Task.Run(async () =>
+                {
+                    Console.WriteLine(
+                        $"Задача {index + 1}: початок обробки {vehicle.Brand} {vehicle.Model}");
+
+                    for (int step = 1; step <= 10; step++)
+                    {
+                        token.ThrowIfCancellationRequested();
+
+                        await Task.Delay(300, token);
+
+                        Console.WriteLine(
+                            $"Задача {index + 1}: {vehicle.Brand} {vehicle.Model}, крок {step}/10");
+                    }
+
+                    token.ThrowIfCancellationRequested();
+
+                    Console.WriteLine(
+                        $"Задача {index + 1}: завершено - {vehicle.GetInfo()}");
+
+                }, token)
+            ).ToArray();
+
+            await Task.Delay(1000);
+
+            Console.WriteLine("\nЗапит на скасування задач...");
+            cts.Cancel();
+
+            try
+            {
+                await Task.WhenAll(tasks);
+            }
+            catch (OperationCanceledException)
+            {
+                Console.WriteLine("Паралельну обробку скасовано.");
+            }
+
+            int completed = tasks.Count(t =>
+                t.Status == TaskStatus.RanToCompletion);
+
+            int canceled = tasks.Count(t => t.IsCanceled);
+
+            Console.WriteLine("\n===== РЕЗУЛЬТАТ =====");
+            Console.WriteLine($"Успішно завершено: {completed}");
+            Console.WriteLine($"Скасовано: {canceled}");
+        }
+
+        Console.WriteLine("\n===== BATCH PROCESSING COMPLETED =====");
+    }
 }
 
 class Result<T>
@@ -191,6 +350,61 @@ class AnalyticsService
 
 class ReportService
 {
+    public async Task ExportToCsvAsync(List<Vehicle> vehicles, CancellationToken token)
+    {
+        string path = "report_async.csv";
+
+        try
+        {
+            using (StreamWriter writer = new StreamWriter(path))
+            {
+                await writer.WriteLineAsync("Id,Brand,Model,Year,Owner");
+
+                foreach (Vehicle vehicle in vehicles)
+                {
+                    token.ThrowIfCancellationRequested();
+
+                    string owner = vehicle.Owner == null
+                        ? "none"
+                        : vehicle.Owner.Fullname;
+
+                    await writer.WriteLineAsync(
+                        $"{vehicle.Id},{vehicle.Brand},{vehicle.Model},{vehicle.Year},{owner}");
+
+                    await Task.Delay(100, token);
+                }
+            }
+
+            Console.WriteLine("Асинхронний звіт створено.");
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine("Створення звіту скасовано.");
+        }
+        catch (IOException ex)
+        {
+            Console.WriteLine($"Помилка запису: {ex.Message}");
+        }
+    }
+
+    public async Task ReadFromCsvAsync(CancellationToken token)
+    {
+        try
+        {
+            string text = await File.ReadAllTextAsync("report_async.csv", token);
+
+            Console.WriteLine("\n===== АСИНХРОННЕ ЧИТАННЯ ЗВІТУ =====");
+            Console.WriteLine(text);
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine("Читання звіту скасовано.");
+        }
+        catch (IOException ex)
+        {
+            Console.WriteLine($"Помилка читання: {ex.Message}");
+        }
+    }
     public void ExportToCsv(List<Vehicle> vehicles)
     {
         string path = "report.csv";
@@ -444,6 +658,84 @@ class Motorcycle : Vehicle
         return $"Id: {Id}, Motorcycle: {Brand} {Model}, Year: {Year}, Enginevolume: {Enginevolume}, Motorcycletype: {Motorcycletype}, Owner: {ownerInfo}";
     }
 }
+class RaceConditionDemo
+{
+    private int vehicleCounter = 0;
+    private readonly object locker = new object();
+
+    private void IncrementUnsafe()
+    {
+        for (int i = 0; i < 100000; i++)
+        {
+            int temp = vehicleCounter;
+            temp++;
+            vehicleCounter = temp;
+        }
+    }
+
+    private void IncrementSafe()
+    {
+        for (int i = 0; i < 100000; i++)
+        {
+            lock (locker)
+            {
+                int temp = vehicleCounter;
+                temp++;
+                vehicleCounter = temp;
+            }
+        }
+    }
+
+    public void Run()
+    {
+        int threadsCount = 10;
+        int operationsPerThread = 100000;
+
+        Console.WriteLine("\n===== DEMONSTRATION RACE CONDITION =====");
+
+        vehicleCounter = 0;
+
+        Thread[] unsafeThreads = new Thread[threadsCount];
+
+        for (int i = 0; i < threadsCount; i++)
+        {
+            unsafeThreads[i] = new Thread(IncrementUnsafe);
+            unsafeThreads[i].Start();
+        }
+
+        foreach (Thread thread in unsafeThreads)
+        {
+            thread.Join();
+        }
+
+        int unsafeResult = vehicleCounter;
+
+        Console.WriteLine("\nБез синхронізації:");
+        Console.WriteLine($"Очікуваний результат: {threadsCount * operationsPerThread}");
+        Console.WriteLine($"Фактичний результат: {unsafeResult}");
+
+        vehicleCounter = 0;
+
+        Thread[] safeThreads = new Thread[threadsCount];
+
+        for (int i = 0; i < threadsCount; i++)
+        {
+            safeThreads[i] = new Thread(IncrementSafe);
+            safeThreads[i].Start();
+        }
+
+        foreach (Thread thread in safeThreads)
+        {
+            thread.Join();
+        }
+
+        Console.WriteLine("\nЗ використанням lock:");
+        Console.WriteLine($"Очікуваний результат: {threadsCount * operationsPerThread}");
+        Console.WriteLine($"Фактичний результат: {vehicleCounter}");
+
+        Console.WriteLine("\n===== DEMONSTRATION COMPLETED =====");
+    }
+}
 
 class Owner : Entity
 {
@@ -478,6 +770,79 @@ class Owner : Entity
     public string GetInfo()
     {
         return $"Id: {Id}, Name: {Fullname}, Phone: {Phone}";
+    }
+}
+class TaskParallelDemo
+{
+    public async Task RunAsync()
+    {
+        Console.WriteLine("\n===== TASK PARALLEL LIBRARY =====");
+
+        Task task1 = Task.Run(() =>
+        {
+            for (int i = 1; i <= 5; i++)
+                Console.WriteLine($"Задача 1: крок {i}");
+        });
+
+        Task task2 = Task.Run(() =>
+        {
+            for (int i = 1; i <= 5; i++)
+                Console.WriteLine($"Задача 2: крок {i}");
+        });
+
+        Task task3 = Task.Run(() =>
+        {
+            for (int i = 1; i <= 5; i++)
+                Console.WriteLine($"Задача 3: крок {i}");
+        });
+
+        await Task.WhenAll(task1, task2, task3);
+
+        Console.WriteLine("Усі задачі успішно завершені.");
+
+        Console.WriteLine("\n===== CANCELLATION TOKEN =====");
+
+        using (CancellationTokenSource cts =
+               new CancellationTokenSource())
+        {
+            CancellationToken token = cts.Token;
+
+            Task[] tasks = new Task[3];
+
+            for (int i = 0; i < tasks.Length; i++)
+            {
+                int taskNumber = i + 1;
+
+                tasks[i] = Task.Run(async () =>
+                {
+                    for (int j = 1; j <= 10; j++)
+                    {
+                        token.ThrowIfCancellationRequested();
+
+                        Console.WriteLine(
+                            $"Задача {taskNumber}: крок {j}");
+
+                        await Task.Delay(300, token);
+                    }
+                }, token);
+            }
+
+            await Task.Delay(1000);
+
+            Console.WriteLine("\nЗапит на скасування задач...");
+            cts.Cancel();
+
+            try
+            {
+                await Task.WhenAll(tasks);
+            }
+            catch (OperationCanceledException)
+            {
+                Console.WriteLine("Паралельні задачі скасовано.");
+            }
+        }
+
+        Console.WriteLine("\n===== TASK DEMONSTRATION COMPLETED =====");
     }
 }
 
@@ -842,7 +1207,7 @@ class VehicleService
 
 class PR1
 {
-    static void Main()
+    static async Task Main()
     {
         VehicleService service = new VehicleService();
         ReportService report = new ReportService();
@@ -906,6 +1271,12 @@ class PR1
             Console.WriteLine("20. Демонстрація власної колекції");
             Console.WriteLine("21. LINQ-аналітика");
             Console.WriteLine("22. Сформувати аналітичний звіт");
+            Console.WriteLine("23. Демонстрація Race Condition та lock");
+            Console.WriteLine("24. Демонстрація Task та CancellationToken");
+            Console.WriteLine("25. Паралельна пакетна обробка Vehicle");
+            Console.WriteLine("26. Асинхронне створення CSV-звіту");
+            Console.WriteLine("27. Асинхронне читання CSV-звіту");
+            Console.WriteLine("28. Демонстрація асинхронності та скасування");
             Console.WriteLine("0. Вихід");
             Console.Write("Виберіть дію: ");
 
@@ -915,9 +1286,9 @@ class PR1
                 continue;
             }
             
-            SafeExecutor.Run(() =>
-                {
-                    switch (choice)
+            await SafeExecutor.RunAsync(async () =>
+            {
+                switch (choice)
                     {
                         case 1:
                         {
@@ -1509,6 +1880,93 @@ class PR1
                         {
                             AnalyticsService analytics = new AnalyticsService();
                             analytics.GenerateReport(service.GetVehicles());
+                            break;
+                        }
+                        case 23:
+                        {
+                            RaceConditionDemo demo = new RaceConditionDemo();
+                            demo.Run();
+                            break;
+                        }
+                        case 24:
+                        {
+                            TaskParallelDemo demo = new TaskParallelDemo();
+                            await demo.RunAsync();
+                            break;
+                        }
+
+                        case 25:
+                        {
+                            TaskParallelBatchDemo demo = new TaskParallelBatchDemo();
+                            await demo.RunAsync(service.GetVehicles());
+                            break;
+                        }
+                        case 26:
+                        {
+                            using (CancellationTokenSource cts = new CancellationTokenSource())
+                            {
+                                ReportService reportService = new ReportService();
+
+                                await reportService.ExportToCsvAsync(
+                                    service.GetVehicles(), cts.Token);
+                            }
+                            break;
+                        }
+
+                        case 27:
+                        {
+                            using (CancellationTokenSource cts = new CancellationTokenSource())
+                            {
+                                ReportService reportService = new ReportService();
+
+                                await reportService.ReadFromCsvAsync(cts.Token);
+                            }
+                            break;
+                        }
+                        case 28:
+                        {
+                            AsyncReportService asyncReport = new AsyncReportService();
+
+                            Console.WriteLine("1. Асинхронне створення звіту");
+                            Console.WriteLine("2. Асинхронне читання звіту");
+                            Console.Write("Виберіть дію: ");
+
+                            if (!int.TryParse(Console.ReadLine(), out int asyncChoice))
+                            {
+                                Console.WriteLine("Некоректне введення.");
+                                break;
+                            }
+
+                            using (CancellationTokenSource cts =
+                                   new CancellationTokenSource())
+                            {
+                                Task operation = null;
+
+                                if (asyncChoice == 1)
+                                {
+                                    operation = asyncReport.ExportAsync(
+                                        service.GetVehicles(), cts.Token);
+                                }
+                                else if (asyncChoice == 2)
+                                {
+                                    operation = asyncReport.ReadAsync(cts.Token);
+                                }
+                                else
+                                {
+                                    Console.WriteLine("Невірний пункт меню.");
+                                    break;
+                                }
+
+                                Console.WriteLine("Натисніть C для скасування операції.");
+
+                                if (Console.ReadKey(true).Key == ConsoleKey.C)
+                                {
+                                    cts.Cancel();
+                                }
+
+                                await operation;
+                            }
+
                             break;
                         }
                     case 0:
