@@ -1501,7 +1501,7 @@ class PR1
                             break;
                         }
                         case 21:
-                        {git                            AnalyticsService analytics = new AnalyticsService();
+                        {   AnalyticsService analytics = new AnalyticsService();
                             analytics.Run(service.GetVehicles());
                             break;
                         }
